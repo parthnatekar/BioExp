@@ -3,7 +3,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import sys
-sys.path.append('..')
+sys.path.append('../..')
 from BioExp.clusters.concept import ConceptIdentification
 from BioExp.graphs import concept
 from BioExp.helpers import utils
@@ -14,8 +14,8 @@ from BioExp.helpers.losses import *
 from keras.backend.tensorflow_backend import set_session
 import argparse
 
-#config = tf.ConfigProto()
-#config.gpu_options.per_process_gpu_memory_fraction = 0.3
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.4
 set_session(tf.Session())
 
 	
@@ -27,14 +27,13 @@ parser = parser.parse_args()
 seq_map = {'flair': 0, 't1': 1, 't2': 3, 't1c':2}
 seq = parser.seq
 
-
 print (seq)
-model_path        = '../../saved_models/model_{}/model-archi.h5'.format(seq)
-weights_path      = '../../saved_models/model_{}/model-wts-{}.hdf5'.format(seq, seq)
+model_path        = '../../trained_models/double_headed/flair_ae_no_skip.hdf5'
+weights_path      = '../../trained_models/double_headed/flair_ae_no_skip_weights.hdf5'
 data_root_path = '/home/pi/Projects/test-data/HGG/'
 
 
-model = load_model(model_path, custom_objects={'gen_dice_loss':gen_dice_loss,
+model = load_model(model_path, compile=False, custom_objects={'gen_dice_loss':gen_dice_loss,
                                         'dice_whole_metric':dice_whole_metric,
                                         'dice_core_metric':dice_core_metric,
                                         'dice_en_metric':dice_en_metric})
@@ -55,9 +54,8 @@ infoclasses['CT'] = (1,3)
 metric = dice_label_coef
 layer_names = ['conv2d_1', 'conv2d_3', 'conv2d_5', 'conv2d_7','conv2d_9', 'conv2d_11', 'conv2d_13', 'conv2d_15', 'conv2d_17', 'conv2d_19', 'conv2d_21']
 
-image, gt = utils.load_vol_brats('../sample_vol/brats/Brats18_CBICA_AOP_1', slicen=105)
-image = image[:, :, seq_map[seq]][:,:, None]
-maks_path = '../sample_vol/brats/Brats18_CBICA_AOP_1/mask.nii.gz'
+image, gt = utils.load_vol_brats('../../sample_vol/brats/Brats18_CBICA_AOP_1', slicen=105)
+maks_path = '../../sample_vol/brats/Brats18_CBICA_AOP_1/mask.nii.gz'
 ROI = sitk.GetArrayFromImage(sitk.ReadImage(maks_path))[105, :, :]
 
 identifier = ConceptIdentification(model, weights_path, metric)
@@ -66,8 +64,9 @@ clusters_info = G.get_concepts('.')
 
 for i in range(len(clusters_info['concept_name'])):
 	concept_info = {'concept_name': clusters_info['concept_name'][i], 'layer_name': clusters_info['layer_name'][i], 'filter_idxs': clusters_info['feature_map_idxs'][i]}
-	identifier.flow_based_identifier(concept_info, 
+	identifier.check_robustness(concept_info, 
 		                    save_path = 'cluster_info_results', 
 		                    test_img = image,
-		                    test_gt = gt)
+		                    test_gt = gt,
+				    save_all = True)
 
