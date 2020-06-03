@@ -23,6 +23,7 @@ class intervention():
 		self.vol_path = glob(test_path)
 		self.test_image, self.gt = load_vol_brats(self.vol_path[3], slicen = 78, pad = 0)
 
+
 	def mean_swap(self, plot = True, save_path='/home/parth/Interpretable_ML/BioExp/results/RCT'):
 
 		channel = 3
@@ -268,4 +269,5 @@ if __name__ == "__main__":
 
 	# I.generate_random_classification(mode='swap')
 	# I.mean_swap(plot = False)
+
 

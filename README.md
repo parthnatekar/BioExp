@@ -1,5 +1,31 @@
 # BioExp
-Explaining Deep Learning Models which perform various image processing tasks in the medical domain.
+[![Build Status](https://travis-ci.org/koriavinash1/BioExp.svg?branch=master)](https://travis-ci.org/koriavinash1/BioExp)
+[![Documentation Status](https://readthedocs.org/projects/bioexp/badge/?version=latest)](https://bioexp.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/BioExp.svg)](https://badge.fury.io/py/BioExp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Explaining Deep Learning Models which perform various image processing tasks in the medical images and natural images.
+
+# Features
+
+- [x] Dissection Analysis
+- [x] Ablation Analysis
+- [x] Uncertainity Analysis
+   - [x] Epistemic Uncertainty using Bayesian Dropout
+   - [x] Aleatoric Uncertainty using Test Time Augmentation
+- [x] Activation Maximization
+- [x] CAM Analysis
+- [x] RCT on input and concept space 
+- [x] Concept generation clustering analysis
+   - [x] wts based clustering
+   - [x] feature based clustering
+- [x] Concept Identification
+  - [x] Dissection based
+  - [x] Flow based
+- [x] Causal Graph 
+- [ ] Inference Methods
+- [ ] Counterfactual Generation
+- [ ] Ante-hoc methods
 
 # Citations
 If you use BioExp, please cite our work:
@@ -11,24 +37,10 @@ If you use BioExp, please cite our work:
   journal={arXiv preprint arXiv:1909.01498},
   year={2019}
 }
-
 ```
 
 # Defined Pipeline
 ![pipeline](./imgs/pipeline.png)
-
-
-# Features
-
-BioExp supports the following interpretability methods:
-
-- Model Dissection Analysis
-- Model Ablation Analysis
-- Model Uncertainty Analysis
-  - Epistemic Uncertainty using Bayesian Dropout
-  - Aleatoric Uncertainty using Test Time Augmentation
-- GradCAM
-- Activation Maximization
 
 # Installation
 Running of the explainability pipeline requires a GPU and several deep learning modules. 
@@ -174,6 +186,9 @@ from BioExp.helpers import radfeatures
 feat_extractor = radfeatures.ExtractRadiomicFeatures(image, mask, save_path = pth)
 df = feat_extractor.all_features()
 ```
+
+# Causal Inference Pipeline
+![un](./imgs/causal_pipeline.png)
 
 # Contact
 - Avinash Kori (koriavinash1@gmail.com)

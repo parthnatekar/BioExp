@@ -49,8 +49,9 @@ class Ablate():
 		for idx, layer in enumerate(self.model.layers):
 			if layer.name == self.layer:
 				self.layer_idx = idx
-
-
+		
+		
+		self.noutputs = len(self.model.outputs)
 		self.model.load_weights(self.weights, by_name = True)
 		self.layer_weights = np.array(self.model.layers[self.layer_idx].get_weights())
 		self.filter_shape = self.layer_weights[0].shape
@@ -75,7 +76,8 @@ class Ablate():
 			filters_to_ablate = np.arange(0, self.filter_shape[-1], step)
 						
 		#predicts each volume and save the results in np array
-		prediction_unshaped = self.model.predict(self.test_image, batch_size=1, verbose=verbose)
+		prediction_unshaped, og_rec = self.model.predict(self.test_image, batch_size=1, verbose=verbose)
+
 
 		dice_json = {}
 		dice_json['concept'] = []
@@ -90,25 +92,58 @@ class Ablate():
 			occluded_weights[1][j] = 0
 
 		self.model.layers[self.layer_idx].set_weights(occluded_weights)			
-		prediction_unshaped_occluded = self.model.predict(self.test_image,batch_size=1, verbose=0) 
+		prediction_unshaped_occluded, ab_rec = self.model.predict(self.test_image,batch_size=1, verbose=0)
 
 		dice_json['concept'].append('actual_' + str(concept))
 		dice_json['concept'].append('ablated_' + str(concept))
-		for class_ in self.classinfo.keys():
-			dice_json[class_].append(self.metric(self.gt, prediction_unshaped.argmax(axis = -1), self.classinfo[class_]))
-			dice_json[class_].append(self.metric(self.gt, prediction_unshaped_occluded.argmax(axis = -1), self.classinfo[class_]))
-		
-		if not (save_path == None):
-			plt.subplot(1,3,1)
-			#plt.imshow(np.squeeze(self.test_image))
-			plt.imshow(np.squeeze(self.gt), alpha=1)
-			plt.subplot(1,3,2)
-			#plt.imshow(np.squeeze(self.test_image))
-			plt.imshow(np.squeeze(prediction_unshaped.argmax(axis = -1)), alpha=1)
-			plt.subplot(1,3,3)
-			#plt.imshow(np.squeeze(self.test_image))
-			plt.imshow(np.squeeze(prediction_unshaped_occluded.argmax(axis = -1)), alpha=1)
-			plt.savefig(os.path.join(save_path, 'image_{}_{}_concept_{}.png'.format(self.image_name, self.layer, concept)))
 
+		for class_ in self.classinfo.keys():
+			if self.noutputs == 1:
+				dice_json[class_].append(self.metric(self.gt, prediction_unshaped.argmax(axis = -1), self.classinfo[class_]))
+				dice_json[class_].append(self.metric(self.gt, prediction_unshaped_occluded.argmax(axis = -1), self.classinfo[class_]))
+			else:
+				for ii in range(self.noutputs):
+					if prediction_unshaped[ii].shape[-1] == self.nclasses:
+						idx = ii
+				dice_json[class_].append(self.metric(self.gt, prediction_unshaped[idx].argmax(axis = -1), self.classinfo[class_]))
+				dice_json[class_].append(self.metric(self.gt, prediction_unshaped_occluded[idx].argmax(axis = -1), self.classinfo[class_]))
+
+		if not (save_path == None):
+			if self.noutputs > 1:
+				plt.subplot(1,2*self.noutputs + 2, 1)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(self.test_image), alpha=1)
+
+				plt.subplot(1,2*self.noutputs + 2, 2)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(self.gt), alpha=1)
+				for ii in range(self.noutputs):
+					plt.subplot(1, 2*self.noutputs + 2, ii + 3)
+					img = prediction_unshaped[ii]
+					if img.shape[-1] == self.nclasses:
+						img = img.argmax(axis = -1)
+					plt.imshow(np.squeeze(img))
+					plt.title('unoccluded')
+				for ii in range(self.noutputs):
+					plt.subplot(1, 2*self.noutputs + 2, self.noutputs + ii + 3)
+					img = prediction_unshaped_occluded[ii]
+					if img.shape[-1] == self.nclasses:
+						img = img.argmax(axis = -1)
+					plt.imshow(np.squeeze(img))
+					plt.title('occluded')
+			else:
+				plt.subplot(1,4,1)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(self.test_image), alpha=1)
+				plt.subplot(1,4,2)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(self.gt), alpha=1)
+				plt.subplot(1,4,3)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(prediction_unshaped.argmax(axis = -1)), alpha=1)
+				plt.subplot(1,4,4)
+				# plt.imshow(np.squeeze(self.test_image))
+				plt.imshow(np.squeeze(prediction_unshaped_occluded.argmax(axis = -1)), alpha=1)
+			plt.savefig(os.path.join(save_path, 'image_{}_{}_concept_{}.png'.format(self.image_name, self.layer, concept)))
 		df = pd.DataFrame(dice_json)
 		return df
