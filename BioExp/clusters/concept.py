@@ -37,7 +37,7 @@ class ConceptIdentification():
         layer_name : intermediate layer name which needs to be analysed
     """
 
-    def __init__(self, model, weights_pth, metric, nclasses=4):
+    def __init__(self, model, weights_pth, metric= None, nclasses=4):
 
         self.model       = model
         self.metric      = metric
@@ -64,7 +64,7 @@ class ConceptIdentification():
             save_path : path to save an image
         """
 
-        plt.figure(figsize=(15, 15))
+        plt.figure(figsize=(5, 5))
         gs = gridspec.GridSpec(nrows, ncols)
         gs.update(wspace=0.025, hspace=0.05)
         
@@ -169,26 +169,29 @@ class ConceptIdentification():
         """
 
         self.model.layers[node_idx].set_weights(occluded_weights)
-        model = Model(inputs = self.model.input, outputs=self.model.get_layer(concept_info['layer_name']).output)
+        features = self.model.get_layer(concept_info['layer_name']).output
+        exp_features = layers.Conv2D(1,1, name='Expectation')(features)
+        model = Model(inputs = self.model.input, outputs=exp_features)
   
-        newmodel = Sequential()
-        newmodel.add(model)
-        newmodel.add(layers.Conv2D(1,1))
+        # newmodel = Sequential()
+        # newmodel.add(model)
+        # newmodel.add()
         
+        # print (model.summary())
         # for ii in range(len(self.model.layers)):
         #    newmodel.layers[ii].set_weights(self.model.layers[ii].get_weights())
-        newmodel.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
+        model.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
 
-        grad = singlelayercam(newmodel, test_img, 
+        grad = singlelayercam(model, test_img, 
                         nclasses = 1, 
                         save_path = save_path, 
                         name  = concept_info['concept_name'], 
                         st_layer_idx = -1, 
-                        end_layer_idx = 1,
+                        end_layer_idx = -2,
                         threshold = 0.5)
         print ("[INFO: BioExp Concept Identification] Identified Concept {} in layer {}".format(concept_info['concept_name'], layer_name))
 
-        del model, newmodel
+        del model
         return grad[0]
 
 
@@ -279,7 +282,7 @@ class ConceptIdentification():
                         nclasses = 1, 
                         name  = concept_info['concept_name'], 
                         st_layer_idx = -1, 
-                        end_layer_idx = 1,
+                        end_layer_idx = -2,
                         threshold = 0.5)
             gradlist.append(nclass_grad[0])
 	
@@ -306,7 +309,7 @@ class ConceptIdentification():
         if save_path:
             plt.clf()
             if save_all:
-                plt.figure(figsize=(10*(nmontecarlo + 1), 10))
+                plt.figure(figsize=(5*(nmontecarlo + 1), 5))
                 gs = gridspec.GridSpec(1, nmontecarlo + 1)
                 gs.update(wspace=0.025, hspace=0.05)
 
@@ -329,7 +332,7 @@ class ConceptIdentification():
                     ax.set_title('sampled')
                     ax.tick_params(bottom='off', top='off', labelbottom='off')
             else:
-                plt.figure(figsize=(10*(2), 10))
+                plt.figure(figsize=(5*(2), 5))
                 gs = gridspec.GridSpec(1, 2)
                 gs.update(wspace=0.025, hspace=0.05)
 
@@ -358,3 +361,4 @@ class ConceptIdentification():
             plt.savefig(os.path.join(save_path, concept_info['concept_name'] +'_robustness.png'), bbox_inches='tight')
             
         return np.mean(montecarlo_grad, axis=0)
+
