@@ -235,7 +235,8 @@ class ConceptIdentification():
 
     def _uniform_sampler_(self, data, size, ax=-1):
         shape = np.mean(data, ax).shape + (size,)
-        return lambda: np.random.uniform(np.min(data, axis=-1)[..., None], np.max(data, axis=-1)[..., None], size = size)
+        print(np.quantile(data, 0.1, axis=-1)[..., None].shape)
+        return lambda: np.random.uniform(np.quantile(data, 0, axis=-1)[..., None], np.quantile(data, 1, axis=-1)[..., None], size = size)
 
     def concept_distribution(self, concept_info):
         """
@@ -261,7 +262,7 @@ class ConceptIdentification():
 
     def concept_robustness(self, concept_info,
                             test_img,
-                            nmontecarlo=3):
+                            nmontecarlo=3, mean_over='cluster', prior='gaussian'):
         """
             test significance of each concepts
 
@@ -276,8 +277,11 @@ class ConceptIdentification():
         node_idxs = concept_info['filter_idxs']
 
         self.model.load_weights(self.weights, by_name = True)
+
         node_idx  = self.get_layer_idx(concept_info['layer_name'])
+
         total_filters = np.arange(np.array(self.model.layers[node_idx].get_weights())[0].shape[-1])
+
         test_filters  = np.delete(total_filters, node_idxs)
 
         layer_weights = np.array(self.model.layers[node_idx].get_weights().copy())
@@ -290,11 +294,23 @@ class ConceptIdentification():
                 occluded_weights[1][j] = 0
             except: pass
 
-        weight_sampler = self._gaussian_sampler_(occluded_weights[0][:,:,:,node_idxs], len(node_idxs)) 
+        if mean_over == 'all':
+            mean_over = total_filters
+        else:
+            mean_over = node_idxs
 
-        try:
-            bias_sampler = self._gaussian_sampler_(occluded_weights[1][:,:,:,node_idxs], len(node_idxs))
-        except: pass
+        if prior == 'gaussian':
+            weight_sampler = self._gaussian_sampler_(occluded_weights[0][:, :, :, mean_over], len(node_idxs)) 
+
+            try:
+                bias_sampler = self._gaussian_sampler_(occluded_weights[1][:, :, :, mean_over], len(node_idxs))
+            except: pass
+        else:
+            weight_sampler = self._uniform_sampler_(occluded_weights[0][:, :, :, mean_over], len(node_idxs)) 
+
+            try:
+                bias_sampler = self._uniform_sampler_(occluded_weights[1][:, :, :, mean_over], len(node_idxs))
+            except: pass
         
         gradlist = []
         for _ in tqdm(range(nmontecarlo)):
@@ -338,14 +354,14 @@ class ConceptIdentification():
                             save_path, 
                             test_img,
                             save_all = False,
-                            nmontecarlo = 4):
+                            nmontecarlo = 4, mean_over='cluster', prior='gaussian'):
 
         actual_grad = self.flow_based_identifier(concept_info,
                                                save_path = None,
                                                test_img = test_img)
         montecarlo_grad = self.concept_robustness(concept_info,
                                               test_img,
-                                              nmontecarlo=nmontecarlo)
+                                              nmontecarlo=nmontecarlo, mean_over=mean_over, prior=prior)
 
         if save_path:
             plt.clf()
@@ -399,6 +415,6 @@ class ConceptIdentification():
             cax = divider.append_axes("right", size="5%", pad=0.2)
             cb = plt.colorbar(im, ax=ax, cax=cax )
             os.makedirs(save_path, exist_ok = True)
-            plt.savefig(os.path.join(save_path, concept_info['concept_name'] +'_gaussian_robustness.png'), bbox_inches='tight')
+            plt.savefig(os.path.join(save_path, concept_info['concept_name'] +'_{}_{}_robustness.png'.format(mean_over, prior)), bbox_inches='tight')
             
         return np.mean(montecarlo_grad, axis=0)
