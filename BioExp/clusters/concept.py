@@ -16,13 +16,14 @@ import SimpleITK as sitk
 import pandas as pd
 from ..helpers.utils import *
 from ..spatial.dissection import Dissector
-from ..spatial.flow import singlelayercam
+from ..spatial.flow import singlelayercam, cam
 from keras.models import Model
 from skimage.transform import resize as imresize
 from keras.utils import np_utils
 from keras import layers
 from keras.models import Sequential
-import keras.backend as tf
+import keras.backend as K
+from tqdm import tqdm
 
 import matplotlib.gridspec as gridspec
 from scipy.ndimage.measurements import label
@@ -134,11 +135,10 @@ class ConceptIdentification():
             if layer.name == layer_name:
                 return idx
 
-    def flow_based_identifier(self, concept_info, 
-                            save_path, 
-                            test_img):
+    def flow_based_identifier(self, concept_info,
+                            test_img, save_path=None, base_grad=False):
         """
-            test significance of each concepts
+            test significance of each concept
 
             concept: {'concept_name', layer_name', 'filter_idxs'}
             dataset_path: 
@@ -147,31 +147,29 @@ class ConceptIdentification():
             test_imgs:
         """
         layer_name = concept_info['layer_name']        
-        node_idxs = concept_info['filter_idxs']
+        node_idxs = [concept_info['filter_idxs']]
 
         self.model.load_weights(self.weights, by_name = True)
         node_idx  = self.get_layer_idx(concept_info['layer_name'])
+
         total_filters = np.arange(np.array(self.model.layers[node_idx].get_weights())[0].shape[-1])
         test_filters  = np.delete(total_filters, node_idxs)
 
-        layer_weights = np.array(self.model.layers[node_idx].get_weights().copy())
-        occluded_weights = layer_weights.copy()
-        for j in test_filters:
-            occluded_weights[0][:,:,:,j] = 0
-            try:
-                occluded_weights[1][j] = 0
-            except: pass
-		
-        """
-        for j in node_idxs:
-            occluded_weights[0][:,:,:,j] = 1.
-            occluded_weights[1][j] = 1.
-        """
+        if base_grad == False:
+            layer_weights = np.array(self.model.layers[node_idx].get_weights().copy())
+            occluded_weights = layer_weights.copy()
+            for j in test_filters:
+                occluded_weights[0][:,:,:,j] = 0
+                try:
+                    occluded_weights[1][j] = 0
+                except: pass
+            self.model.layers[node_idx].set_weights(occluded_weights)
 
         self.model.layers[node_idx].set_weights(occluded_weights)
         features = self.model.get_layer(concept_info['layer_name']).output
         exp_features = layers.Conv2D(1,1, name='Expectation')(features)
         model = Model(inputs = self.model.input, outputs=exp_features)
+
   
         # newmodel = Sequential()
         # newmodel.add(model)
@@ -182,7 +180,48 @@ class ConceptIdentification():
         #    newmodel.layers[ii].set_weights(self.model.layers[ii].get_weights())
         model.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
 
+
         grad = singlelayercam(model, test_img, 
+                        nclasses = 1,
+                        name  = concept_info['concept_name'], 
+                        st_layer_idx = -1, 
+                        end_layer_idx = 1,
+                        threshold = 0.5)
+
+        if base_grad == True:
+            print ("[INFO: BioExp Concept Identification] Base Concept in layer {}".format(layer_name))
+        else:
+            print ("[INFO: BioExp Concept Identification] Identified Concept {} in layer {}".format(concept_info['concept_name'], layer_name))
+
+        del model, newmodel
+
+        return grad[0]
+
+    def flow_based_identifier_no_conv(self, concept_info, save_path, test_img, base_grad=False):
+
+        layer_name = concept_info['layer_name']        
+        node_idxs = concept_info['filter_idxs']
+
+        print(node_idxs)
+
+        self.model.load_weights(self.weights, by_name = True)
+
+        total_filters = np.arange(np.array(self.model.get_layer(concept_info['layer_name']).get_weights())[0].shape[-1])
+        test_filters  = np.delete(total_filters, node_idxs)
+
+        layer_weights = np.array(self.model.get_layer(concept_info['layer_name']).get_weights().copy())
+        occluded_weights = layer_weights.copy()
+        for j in test_filters:
+            occluded_weights[0][:,:,:,j] = 0
+            try:
+                occluded_weights[1][j] = 0
+            except: pass
+
+        self.model.get_layer(concept_info['layer_name']).set_weights(occluded_weights)
+
+        grad_model = Model(inputs = self.model.input, outputs=self.model.get_layer(concept_info['layer_name']).output)
+
+        grad = singlelayercam(grad_model, test_img, 
                         nclasses = 1, 
                         save_path = save_path, 
                         name  = concept_info['concept_name'], 
@@ -191,14 +230,19 @@ class ConceptIdentification():
                         threshold = 0.5)
         print ("[INFO: BioExp Concept Identification] Identified Concept {} in layer {}".format(concept_info['concept_name'], layer_name))
 
-        del model
-        return grad[0]
+        del grad_model
+
+        return(grad)
 
 
     def _gaussian_sampler_(self, data, size, ax=-1):
         shape = np.mean(data, ax).shape + (size,)
         return lambda: np.std(data, -1)[..., None] * np.random.randn(*list(shape)) + np.mean(data, -1)[..., None] # np.random.normal(loc=np.mean(data, axis=ax), scale=np.std(data, axis=ax), size=size)
 
+    def _uniform_sampler_(self, data, size, ax=-1):
+        shape = np.mean(data, ax).shape + (size,)
+        print(np.quantile(data, 0.1, axis=-1)[..., None].shape)
+        return lambda: np.random.uniform(np.quantile(data, 0, axis=-1)[..., None], np.quantile(data, 1, axis=-1)[..., None], size = size)
 
     def concept_distribution(self, concept_info):
         """
@@ -224,7 +268,7 @@ class ConceptIdentification():
 
     def concept_robustness(self, concept_info,
                             test_img,
-                            nmontecarlo=3):
+                            nmontecarlo=3, mean_over='cluster', prior='gaussian'):
         """
             test significance of each concepts
 
@@ -239,8 +283,11 @@ class ConceptIdentification():
         node_idxs = concept_info['filter_idxs']
 
         self.model.load_weights(self.weights, by_name = True)
+
         node_idx  = self.get_layer_idx(concept_info['layer_name'])
+
         total_filters = np.arange(np.array(self.model.layers[node_idx].get_weights())[0].shape[-1])
+
         test_filters  = np.delete(total_filters, node_idxs)
 
         layer_weights = np.array(self.model.layers[node_idx].get_weights().copy())
@@ -253,14 +300,28 @@ class ConceptIdentification():
                 occluded_weights[1][j] = 0
             except: pass
 
-        weight_sampler = self._gaussian_sampler_(occluded_weights[0][:,:,:,node_idxs], len(node_idxs)) 
+        if mean_over == 'all':
+            mean_over = total_filters
+        else:
+            mean_over = node_idxs
 
-        try:
-            bias_sampler = self._gaussian_sampler_(occluded_weights[1][:,:,:,node_idxs], len(node_idxs))
-        except: pass
+        if prior == 'gaussian':
+            weight_sampler = self._gaussian_sampler_(occluded_weights[0][:, :, :, mean_over], len(node_idxs)) 
+
+            try:
+                bias_sampler = self._gaussian_sampler_(occluded_weights[1][:, :, :, mean_over], len(node_idxs))
+            except: pass
+        else:
+            weight_sampler = self._uniform_sampler_(occluded_weights[0][:, :, :, mean_over], len(node_idxs)) 
+
+            try:
+                bias_sampler = self._uniform_sampler_(occluded_weights[1][:, :, :, mean_over], len(node_idxs))
+            except: pass
         
         gradlist = []
-        for _ in range(nmontecarlo):
+        for _ in tqdm(range(nmontecarlo)):
+
+            self.model.load_weights(self.weights, by_name = True)
 
             occluded_weights[0][:,:,:,node_idxs] = weight_sampler()
             try:
@@ -285,11 +346,13 @@ class ConceptIdentification():
                         end_layer_idx = -2,
                         threshold = 0.5)
             gradlist.append(nclass_grad[0])
+
+            del model, newmodel
 	
-        try:
-            del bias_sampler
-        except: pass       
-        del model, newmodel
+        # try:
+        #     del bias_sampler
+        # except: pass     
+
         return np.array(gradlist)
 
 
@@ -297,14 +360,14 @@ class ConceptIdentification():
                             save_path, 
                             test_img,
                             save_all = False,
-                            nmontecarlo = 4):
+                            nmontecarlo = 4, mean_over='cluster', prior='gaussian'):
 
         actual_grad = self.flow_based_identifier(concept_info,
                                                save_path = None,
                                                test_img = test_img)
         montecarlo_grad = self.concept_robustness(concept_info,
                                               test_img,
-                                              nmontecarlo=nmontecarlo)
+                                              nmontecarlo=nmontecarlo, mean_over=mean_over, prior=prior)
 
         if save_path:
             plt.clf()
@@ -358,7 +421,7 @@ class ConceptIdentification():
             cax = divider.append_axes("right", size="5%", pad=0.2)
             cb = plt.colorbar(im, ax=ax, cax=cax )
             os.makedirs(save_path, exist_ok = True)
-            plt.savefig(os.path.join(save_path, concept_info['concept_name'] +'_robustness.png'), bbox_inches='tight')
+            plt.savefig(os.path.join(save_path, concept_info['concept_name'] +'_{}_{}_robustness.png'.format(mean_over, prior)), bbox_inches='tight')
             
         return np.mean(montecarlo_grad, axis=0)
 

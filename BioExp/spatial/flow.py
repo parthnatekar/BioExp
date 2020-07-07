@@ -30,7 +30,7 @@ def singlelayercam(model, img,
     
     layer_dice = np.zeros((1, nclasses))
     layer_info = np.zeros((1, nclasses))
-    if save_path:
+    if save_path is not None:
         plt.figure(figsize=(10*nclasses, 10))
         gs = gridspec.GridSpec(1, nclasses)
         gs.update(wspace=0.025, hspace=0.05)
@@ -39,7 +39,7 @@ def singlelayercam(model, img,
     for i  in range(nclasses):
         grads_ = visualize_cam(model, st_layer_idx, filter_indices=i, penultimate_layer_idx = end_layer_idx,  
                     seed_input = img[None, ...], backprop_modifier = modifier)
-        if save_path:
+        if save_path is not None:
             ax = plt.subplot(gs[i])
             im = ax.imshow(np.squeeze(img), vmin=0, vmax=1)
             im = ax.imshow(grads_, cmap=plt.get_cmap('jet'), alpha=0.5, vmin=0, vmax=1)
@@ -50,16 +50,16 @@ def singlelayercam(model, img,
 
         nclass_grad.append(grads_)
         
-    if save_path:
+    if save_path is not None:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.2)
-        cb = plt.colorbar(im, ax=ax, cax=cax )
+        # cb = plt.colorbar(im, ax=ax, cax=cax )
         os.makedirs(save_path, exist_ok = True)
         plt.savefig(os.path.join(save_path, name +'.png'), bbox_inches='tight')
     return np.array(nclass_grad)
 
 
-def cam(model, img, gt, 
+def cam(model, img, gt=None, 
     nclasses = 2, 
     save_path = None, 
     layer_idx = -1, 
