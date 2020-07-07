@@ -198,8 +198,11 @@ class Feature_Visualizer():
                             transforms=transforms, relu_gradient_override=False)
       tf.initialize_all_variables().run()
 
+      images_array = []
+
       for i in range(opt_steps):
         T("vis_op").run()
+        images_array.append(T("input").eval()[:, :, :, -1].reshape((240, 240)))
 
       plt.figure(figsize=(10,10))
       # for i in range(1, self.n_channels+1):
@@ -209,7 +212,7 @@ class Feature_Visualizer():
         
       texture_images = []
 
-      for i in range(1 self.n_channels+1):
+      for i in range(1, self.n_channels+1):
         # plt.subplot(1, self.n_channels, i)
         image = T("input").eval()[:, :, :, i - 1].reshape((240, 240))
         print("channel: ", i, image.min(), image.max())
@@ -226,5 +229,5 @@ class Feature_Visualizer():
       # plt.show()
       # print(np.array(texture_images).shape) 
 
-    return np.array(texture_images)
+    return np.array(texture_images), images_array
 
