@@ -170,7 +170,6 @@ class ConceptIdentification():
         exp_features = layers.Conv2D(1,1, name='Expectation')(features)
         model = Model(inputs = self.model.input, outputs=exp_features)
 
-  
         # newmodel = Sequential()
         # newmodel.add(model)
         # newmodel.add()
@@ -180,12 +179,11 @@ class ConceptIdentification():
         #    newmodel.layers[ii].set_weights(self.model.layers[ii].get_weights())
         model.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
 
-
         grad = singlelayercam(model, test_img, 
                         nclasses = 1,
                         name  = concept_info['concept_name'], 
                         st_layer_idx = -1, 
-                        end_layer_idx = 1,
+                        end_layer_idx = -3,
                         threshold = 0.5)
 
         if base_grad == True:
@@ -193,9 +191,9 @@ class ConceptIdentification():
         else:
             print ("[INFO: BioExp Concept Identification] Identified Concept {} in layer {}".format(concept_info['concept_name'], layer_name))
 
-        del model, newmodel
+        del model
 
-        return grad[0]
+        return grad
 
     def flow_based_identifier_no_conv(self, concept_info, save_path, test_img, base_grad=False):
 
@@ -226,7 +224,7 @@ class ConceptIdentification():
                         save_path = save_path, 
                         name  = concept_info['concept_name'], 
                         st_layer_idx = -1, 
-                        end_layer_idx = -2,
+                        end_layer_idx = -3,
                         threshold = 0.5)
         print ("[INFO: BioExp Concept Identification] Identified Concept {} in layer {}".format(concept_info['concept_name'], layer_name))
 
@@ -237,12 +235,13 @@ class ConceptIdentification():
 
     def _gaussian_sampler_(self, data, size, ax=-1):
         shape = np.mean(data, ax).shape + (size,)
-        return lambda: np.std(data, -1)[..., None] * np.random.randn(*list(shape)) + np.mean(data, -1)[..., None] # np.random.normal(loc=np.mean(data, axis=ax), scale=np.std(data, axis=ax), size=size)
+        return lambda: np.std(data, -1)[..., None] * np.random.randn(*list(shape)) + np.mean(data, -1)[..., None] 
+        # return lambda: np.random.normal(np.mean(data, -1)[..., None], np.std(data, -1)[..., None], size = size)
 
     def _uniform_sampler_(self, data, size, ax=-1):
         shape = np.mean(data, ax).shape + (size,)
-        print(np.quantile(data, 0.1, axis=-1)[..., None].shape)
-        return lambda: np.random.uniform(np.quantile(data, 0, axis=-1)[..., None], np.quantile(data, 1, axis=-1)[..., None], size = size)
+        return lambda: np.quantile(data, 0.1, axis=-1)[..., None] * np.random.rand(*list(shape)) + np.quantile(data, 0.9, axis=-1)[..., None]
+        # return lambda: np.random.uniform(np.quantile(data, 0.1, axis=-1)[..., None], np.quantile(data, 0.9, axis=-1)[..., None], size = size)
 
     def concept_distribution(self, concept_info):
         """
@@ -329,25 +328,24 @@ class ConceptIdentification():
             except: pass
         
             self.model.layers[node_idx].set_weights(occluded_weights)
-            model = Model(inputs = self.model.input, outputs=self.model.get_layer(concept_info['layer_name']).output)
-  
-            newmodel = Sequential()
-            newmodel.add(model)
-            newmodel.add(layers.Conv2D(1,1))
+            features = self.model.get_layer(concept_info['layer_name']).output
+            exp_features = layers.Conv2D(1,1, name='Expectation')(features)
+            model = Model(inputs = self.model.input, outputs=exp_features)
         
             # for ii in range(len(self.model.layers)):
             #    newmodel.layers[ii].set_weights(self.model.layers[ii].get_weights())
-            newmodel.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
+            model.layers[-1].set_weights((np.ones((1, 1, len(total_filters), 1)), np.ones(1)))
 
-            nclass_grad = singlelayercam(newmodel, test_img, 
+            nclass_grad = singlelayercam(model, test_img, 
                         nclasses = 1, 
                         name  = concept_info['concept_name'], 
                         st_layer_idx = -1, 
-                        end_layer_idx = -2,
+                        end_layer_idx = -3,
                         threshold = 0.5)
-            gradlist.append(nclass_grad[0])
 
-            del model, newmodel
+            gradlist.append(nclass_grad)
+
+            del model
 	
         # try:
         #     del bias_sampler
