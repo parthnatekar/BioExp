@@ -31,12 +31,16 @@ Explaining Deep Learning Models which perform various image processing tasks in 
 If you use BioExp, please cite our work:
 
 ```
-@article{natekar2019demystifying,
-  title={Demystifying Brain Tumour Segmentation Networks: Interpretability and Uncertainty Analysis},
+@article{natekar2020demystifying,
+  title={Demystifying Brain Tumor Segmentation Networks: Interpretability and Uncertainty Analysis},
   author={Natekar, Parth and Kori, Avinash and Krishnamurthi, Ganapathy},
-  journal={arXiv preprint arXiv:1909.01498},
-  year={2019}
+  journal={Frontiers in Computational Neuroscience},
+  volume={14},
+  pages={6},
+  year={2020},
+  publisher={Frontiers}
 }
+
 ```
 
 # Defined Pipeline
